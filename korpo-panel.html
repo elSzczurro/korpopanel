@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KorpoPanel – zarządzanie korporacją</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f3f5f9;--card:#fff;--tx:#18202e;--mut:#667085;--bd:#dde2ea;--pri:#1f4fd8;--pri-tx:#fff;--err:#c4262e;--ok:#157f4b;--side:#101a33}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1220;--card:#161d30;--tx:#e8ecf5;--mut:#98a2b8;--bd:#27314a;--pri:#5b86ff;--pri-tx:#0b1020;--err:#ff7a80;--ok:#4cd38e;--side:#080d1a}}
+:root[data-theme="dark"]{--bg:#0d1220;--card:#161d30;--tx:#e8ecf5;--mut:#98a2b8;--bd:#27314a;--pri:#5b86ff;--pri-tx:#0b1020;--err:#ff7a80;--ok:#4cd38e;--side:#080d1a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100vh}
+.login{display:grid;place-items:center;min-height:100vh;padding:20px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:24px;width:100%}
+.login .card{max-width:380px}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:18px;margin:0 0 14px}
+.mut{color:var(--mut);font-size:13px}
+label{display:block;font-size:13px;font-weight:600;margin:12px 0 4px}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--pri);outline-offset:1px}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:9px 14px}
+button.p{background:var(--pri);color:var(--pri-tx);border-color:var(--pri);font-weight:600}
+button.d{color:var(--err)}
+.full{width:100%;margin-top:18px}
+.msg{margin-top:12px;font-size:13px;min-height:18px}.msg.e{color:var(--err)}.msg.o{color:var(--ok)}
+.app{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+.side{background:var(--side);color:#e8ecf5;padding:20px 14px;display:flex;flex-direction:column;gap:6px}
+.side .brand{font-weight:700;font-size:17px;margin-bottom:14px;padding:0 8px}
+.side button{background:none;border:0;color:#b9c3dc;text-align:left;padding:10px;border-radius:8px}
+.side button.on,.side button:hover{background:rgba(255,255,255,.1);color:#fff}
+.side .who{margin-top:auto;padding:8px;font-size:13px;color:#b9c3dc}
+.main{padding:24px;max-width:960px;width:100%}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px}
+.stat b{display:block;font-size:26px}
+.row2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0 14px}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--bd);white-space:nowrap}
+th{color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase}
+.tag{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--bd)}
+.tag.a{color:var(--pri);border-color:var(--pri)}.tag.g{color:var(--ok);border-color:var(--ok)}.tag.r{color:var(--err);border-color:var(--err)}.tag.y{color:#b7791f;border-color:#b7791f}.late{color:var(--err);font-weight:600}textarea{resize:vertical}
+.warn{background:rgba(196,38,46,.1);border:1px solid var(--err);color:var(--err);padding:10px 12px;border-radius:8px;margin-bottom:14px}
+@media(max-width:700px){.app{grid-template-columns:1fr}.side{flex-direction:row;flex-wrap:wrap;align-items:center}.side .brand{width:100%;margin:0}.side .who{margin:0 0 0 auto}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+"use strict";
+var USERS_KEY="korpo_users_v1", mem={}, me=null, view="home";
+function sget(k){try{return localStorage.getItem(k)}catch(e){return mem[k]||null}}
+function sset(k,v){try{localStorage.setItem(k,v)}catch(e){mem[k]=v}}
+function ssGet(k){try{return sessionStorage.getItem(k)}catch(e){return mem["s"+k]||null}}
+function ssSet(k,v){try{v==null?sessionStorage.removeItem(k):sessionStorage.setItem(k,v)}catch(e){mem["s"+k]=v}}
+
+function h(tag,attrs){
+  var el=document.createElement(tag);
+  for(var k in (attrs||{})){var v=attrs[k];
+    if(k==="class")el.className=v;else if(k.slice(0,2)==="on")el.addEventListener(k.slice(2),v);else el.setAttribute(k,v);}
+  for(var i=2;i<arguments.length;i++){var c=arguments[i];if(c==null)continue;
+    el.appendChild(typeof c==="string"||typeof c==="number"?document.createTextNode(c):c);}
+  return el;
+}
+function rnd(n){var a=new Uint8Array(n);crypto.getRandomValues(a);return Array.from(a,function(x){return x.toString(16).padStart(2,"0")}).join("")}
+async function hash(pw,salt){
+  var d=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(salt+":"+pw));
+  return Array.from(new Uint8Array(d),function(x){return x.toString(16).padStart(2,"0")}).join("");
+}
+function load(){try{return JSON.parse(sget(USERS_KEY)||"[]")}catch(e){return[]}}
+function save(u){sset(USERS_KEY,JSON.stringify(u))}
+async function mkUser(login,name,dept,role,pw,must){
+  var salt=rnd(16);
+  return {id:rnd(6),login:login.toLowerCase(),name:name,dept:dept,role:role,salt:salt,hash:await hash(pw,salt),must:!!must,created:new Date().toISOString()};
+}
+async function init(){
+  var u=load();
+  if(!u.length){u=[await mkUser("admin","Administrator systemu","IT","admin","admin123",true)];save(u);}
+  var sid=ssGet("korpo_sid");
+  if(sid){me=u.find(function(x){return x.id===sid})||null;}
+  render();
+}
+function passErr(p){
+  if(p.length<8)return "Hasło musi mieć co najmniej 8 znaków.";
+  if(!/[A-Za-z]/.test(p)||!/[0-9]/.test(p))return "Hasło musi zawierać literę i cyfrę.";
+  return "";
+}
+function setMsg(el,t,ok){el.textContent=t;el.className="msg "+(ok?"o":"e")}
+
+var fails=0,lockUntil=0;
+function loginView(){
+  var l=h("input",{id:"l",autocomplete:"username",autofocus:"autofocus"}),
+      p=h("input",{id:"p",type:"password",autocomplete:"current-password"}),
+      m=h("div",{class:"msg e"});
+  async function go(e){
+    e.preventDefault();
+    if(Date.now()<lockUntil){setMsg(m,"Zbyt wiele prób. Odczekaj "+Math.ceil((lockUntil-Date.now())/1000)+" s.");return}
+    var u=load().find(function(x){return x.login===l.value.trim().toLowerCase()});
+    var ok=u&&(await hash(p.value,u.salt))===u.hash;
+    if(!ok){fails++;if(fails>=5){lockUntil=Date.now()+30000;fails=0}setMsg(m,"Nieprawidłowy login lub hasło.");return}
+    fails=0;me=u;ssSet("korpo_sid",u.id);view=u.must?"pass":"home";render();
+  }
+  return h("div",{class:"login"},h("form",{class:"card",onsubmit:go},
+    h("h1",null,"KorpoPanel"),h("div",{class:"mut"},"Zaloguj się, aby przejść do systemu zarządzania."),
+    h("label",{for:"l"},"Login"),l,h("label",{for:"p"},"Hasło"),p,
+    h("button",{class:"p full",type:"submit"},"Zaloguj się"),m,
+    h("div",{class:"mut",style:"margin-top:10px"},"Pierwsze logowanie: admin / admin123 (system wymusi zmianę hasła).")));
+}
+
+function homeView(){
+  var u=load(),admins=u.filter(function(x){return x.role==="admin"}).length;
+  var depts={};u.forEach(function(x){depts[x.dept]=1});
+  return h("div",null,h("h2",null,"Witaj, "+me.name),
+    h("div",{class:"grid"},
+      stat("Konta w systemie",u.length),stat("Administratorzy",admins),stat("Działy",Object.keys(depts).length)),
+    homeExtra(),h("div",{class:"card"},h("b",null,"Twoje konto"),
+      h("p",{class:"mut"},"Login: "+me.login+" · Dział: "+me.dept+" · Rola: "+(me.role==="admin"?"administrator":"pracownik"))));
+}
+function stat(t,v){return h("div",{class:"card stat"},h("span",{class:"mut"},t),h("b",null,v))}
+
+function accountsView(){
+  var wrap=h("div",null,h("h2",null,"Zarządzanie kontami"));
+  var f={login:h("input",{autocomplete:"off"}),name:h("input"),dept:h("input"),
+    role:h("select",null,h("option",{value:"user"},"Pracownik"),h("option",{value:"admin"},"Administrator")),
+    pw:h("input",{type:"text",autocomplete:"off"})};
+  var m=h("div",{class:"msg"});
+  async function add(e){
+    e.preventDefault();
+    var lg=f.login.value.trim().toLowerCase(),u=load();
+    if(!/^[a-z0-9._-]{3,32}$/.test(lg))return setMsg(m,"Login: 3–32 znaków (litery, cyfry, . _ -).");
+    if(u.some(function(x){return x.login===lg}))return setMsg(m,"Taki login już istnieje.");
+    if(!f.name.value.trim())return setMsg(m,"Podaj imię i nazwisko.");
+    var pe=passErr(f.pw.value);if(pe)return setMsg(m,pe);
+    u.push(await mkUser(lg,f.name.value.trim(),f.dept.value.trim()||"—",f.role.value,f.pw.value,true));
+    save(u);render();
+  }
+  wrap.appendChild(h("form",{class:"card",onsubmit:add,style:"margin-bottom:18px"},h("b",null,"Dodaj nowe konto"),
+    h("div",{class:"row2"},
+      h("div",null,h("label",null,"Login"),f.login),h("div",null,h("label",null,"Imię i nazwisko"),f.name),
+      h("div",null,h("label",null,"Dział"),f.dept),h("div",null,h("label",null,"Rola"),f.role),
+      h("div",null,h("label",null,"Hasło tymczasowe"),f.pw)),
+    h("div",{class:"mut",style:"margin-top:6px"},"Użytkownik zmieni hasło przy pierwszym logowaniu."),
+    h("button",{class:"p",type:"submit",style:"margin-top:14px"},"Dodaj konto"),m));
+  var tb=h("tbody");
+  load().forEach(function(u){
+    var acts=h("td");
+    if(u.id!==me.id){
+      acts.appendChild(h("button",{onclick:async function(){
+        var np=prompt("Nowe hasło tymczasowe dla "+u.login+" (min. 8 znaków, litera i cyfra):");
+        if(np==null)return;var e=passErr(np);if(e){alert(e);return}
+        var all=load(),t=all.find(function(x){return x.id===u.id});
+        t.salt=rnd(16);t.hash=await hash(np,t.salt);t.must=true;save(all);alert("Hasło zresetowane.");
+      }},"Reset hasła"));
+      acts.appendChild(document.createTextNode(" "));
+      acts.appendChild(h("button",{class:"d",onclick:function(){
+        if(!confirm("Usunąć konto „"+u.login+"”?"))return;
+        save(load().filter(function(x){return x.id!==u.id}));render();
+      }},"Usuń"));
+    }else acts.appendChild(h("span",{class:"mut"},"to Ty"));
+    tb.appendChild(h("tr",null,h("td",null,u.login),h("td",null,u.name),h("td",null,u.dept),
+      h("td",null,h("span",{class:"tag"+(u.role==="admin"?" a":"")},u.role==="admin"?"admin":"pracownik")),acts));
+  });
+  wrap.appendChild(h("div",{class:"card"},h("div",{class:"tw"},h("table",null,
+    h("thead",null,h("tr",null,["Login","Osoba","Dział","Rola",""].map(function(t){return h("th",null,t)}))),tb))));
+  wrap.appendChild(backupCard());
+  return wrap;
+}
+
+function passView(){
+  var cur=h("input",{type:"password",autocomplete:"current-password"}),n1=h("input",{type:"password",autocomplete:"new-password"}),
+      n2=h("input",{type:"password",autocomplete:"new-password"}),m=h("div",{class:"msg"});
+  async function go(e){
+    e.preventDefault();
+    var all=load(),t=all.find(function(x){return x.id===me.id});
+    if((await hash(cur.value,t.salt))!==t.hash)return setMsg(m,"Obecne hasło jest nieprawidłowe.");
+    var pe=passErr(n1.value);if(pe)return setMsg(m,pe);
+    if(n1.value!==n2.value)return setMsg(m,"Nowe hasła nie są identyczne.");
+    if(n1.value===cur.value)return setMsg(m,"Nowe hasło musi różnić się od obecnego.");
+    t.salt=rnd(16);t.hash=await hash(n1.value,t.salt);t.must=false;save(all);me=t;
+    cur.value=n1.value=n2.value="";setMsg(m,"Hasło zostało zmienione.",true);
+    if(view==="pass"&&!document.querySelector(".side .on[data-v='pass']"))setTimeout(render,600);
+    setTimeout(function(){view==="pass"&&render()},900);
+  }
+  var box=h("form",{class:"card",onsubmit:go,style:"max-width:420px"},h("h2",null,"Zmiana hasła"),
+    h("label",null,"Obecne hasło"),cur,h("label",null,"Nowe hasło"),n1,h("label",null,"Powtórz nowe hasło"),n2,
+    h("button",{class:"p full",type:"submit"},"Zmień hasło"),m);
+  return h("div",null,me.must?h("div",{class:"warn"},"Musisz ustawić nowe hasło, zanim przejdziesz dalej."):null,box);
+}
+
+var TK="korpo_tasks_v1",AK="korpo_ann_v1",LK="korpo_leave_v1",ST=["do zrobienia","w toku","zrobione"],PR=["niski","średni","wysoki"],tkF="mine";
+function ld(k){try{return JSON.parse(sget(k)||"[]")}catch(e){return[]}}
+function sv(k,v){sset(k,JSON.stringify(v))}
+function nm(id){var u=load().find(function(x){return x.id===id});return u?u.name:"(usunięte konto)"}
+function today(){return new Date().toISOString().slice(0,10)}
+function opts(a){return a.map(function(o){return h("option",{value:o[0]},o[1])})}
+function same(a){return a.map(function(x){return[x,x]})}
+function field(l,el){return h("div",null,h("label",null,l),el)}
+function tbl(heads,rows){return h("div",{class:"card"},h("div",{class:"tw"},h("table",null,h("thead",null,h("tr",null,...heads.map(function(t){return h("th",null,t)}))),h("tbody",null,...rows))))}
+function upd(key,id,fn){var a=ld(key);fn(a.find(function(y){return y.id===id}));sv(key,a);render()}
+function rm(key,id){sv(key,ld(key).filter(function(y){return y.id!==id}));render()}
+
+function tasksView(){
+  var A=me.role==="admin",us=A?load():[me];
+  var t=h("input"),d=h("input",{type:"date"}),p=h("select",null,...opts(same(PR))),
+      w=h("select",null,...opts(us.map(function(u){return[u.id,u.name]}))),m=h("div",{class:"msg"});
+  p.value="średni";w.value=me.id;
+  function add(e){e.preventDefault();if(!t.value.trim())return setMsg(m,"Podaj tytuł zadania.");
+    var a=ld(TK);a.push({id:rnd(6),title:t.value.trim(),who:w.value,by:me.id,due:d.value,pr:p.value,st:ST[0]});sv(TK,a);render()}
+  var ord={wysoki:0,"średni":1,niski:2},colr={wysoki:"r","średni":"y",niski:"g"};
+  var list=ld(TK).filter(function(x){return A&&tkF==="all"||x.who===me.id});
+  list.sort(function(a,b){return (a.st==="zrobione")-(b.st==="zrobione")||ord[a.pr]-ord[b.pr]});
+  var rows=list.map(function(x){
+    var late=x.due&&x.due<today()&&x.st!=="zrobione";
+    var s=h("select",{onchange:function(){upd(TK,x.id,function(y){y.st=s.value})}},...opts(same(ST)));s.value=x.st;
+    var del=(A||x.by===me.id)?h("button",{class:"d",onclick:function(){rm(TK,x.id)}},"Usuń"):"";
+    return h("tr",null,h("td",null,x.title),h("td",null,nm(x.who)),h("td",{class:late?"late":""},(x.due||"—")+(late?" ⚠":"")),
+      h("td",null,h("span",{class:"tag "+colr[x.pr]},x.pr)),h("td",null,(A||x.who===me.id)?s:x.st),h("td",null,del))});
+  var flt=null;
+  if(A){flt=h("select",{style:"width:auto;margin-bottom:12px",onchange:function(){tkF=flt.value;render()}},...opts([["mine","Moje zadania"],["all","Wszystkie zadania"]]));flt.value=tkF}
+  return h("div",null,h("h2",null,"Zadania"),
+    h("form",{class:"card",onsubmit:add,style:"margin-bottom:18px"},h("b",null,"Nowe zadanie"),
+      h("div",{class:"row2"},field("Tytuł",t),field("Termin",d),field("Priorytet",p),field("Przypisz do",w)),
+      h("button",{class:"p",type:"submit",style:"margin-top:14px"},"Dodaj zadanie"),m),
+    flt,rows.length?tbl(["Zadanie","Osoba","Termin","Priorytet","Status",""],rows):h("p",{class:"mut"},"Brak zadań."));
+}
+
+function leaveView(){
+  var A=me.role==="admin",f=h("input",{type:"date",value:today()}),t=h("input",{type:"date",value:today()}),n=h("input"),m=h("div",{class:"msg"});
+  function add(e){e.preventDefault();if(t.value<f.value)return setMsg(m,"Data końca jest wcześniejsza niż początku.");
+    var a=ld(LK);a.push({id:rnd(6),uid:me.id,from:f.value,to:t.value,note:n.value.trim(),st:"oczekuje"});sv(LK,a);render()}
+  var rows=ld(LK).filter(function(x){return A||x.uid===me.id}).reverse().map(function(x){
+    var c=h("td");
+    function set(s){return function(){upd(LK,x.id,function(y){y.st=s})}}
+    if(A&&x.st==="oczekuje"){c.appendChild(h("button",{class:"p",onclick:set("zatwierdzony")},"Zatwierdź"));c.appendChild(document.createTextNode(" "));c.appendChild(h("button",{class:"d",onclick:set("odrzucony")},"Odrzuć"))}
+    else if(!A&&x.st==="oczekuje")c.appendChild(h("button",{class:"d",onclick:function(){rm(LK,x.id)}},"Anuluj"));
+    return h("tr",null,h("td",null,nm(x.uid)),h("td",null,x.from+" → "+x.to),h("td",null,x.note||"—"),
+      h("td",null,h("span",{class:"tag "+(x.st==="zatwierdzony"?"g":x.st==="odrzucony"?"r":"y")},x.st)),c)});
+  return h("div",null,h("h2",null,"Wnioski urlopowe"),
+    h("form",{class:"card",onsubmit:add,style:"margin-bottom:18px"},h("b",null,"Nowy wniosek"),
+      h("div",{class:"row2"},field("Od",f),field("Do",t),field("Uwagi",n)),
+      h("button",{class:"p",type:"submit",style:"margin-top:14px"},"Złóż wniosek"),m),
+    rows.length?tbl(["Osoba","Termin","Uwagi","Status",""],rows):h("p",{class:"mut"},"Brak wniosków."));
+}
+
+function annList(n,del){
+  var a=ld(AK).slice().reverse().slice(0,n);
+  if(!a.length)return h("p",{class:"mut"},"Brak ogłoszeń.");
+  return h("div",null,...a.map(function(x){return h("div",{class:"card",style:"margin-bottom:10px"},h("b",null,x.title),
+    h("div",{class:"mut"},nm(x.by)+" · "+x.date),h("p",{style:"white-space:pre-wrap;margin:8px 0 0"},x.text),
+    del?h("button",{class:"d",style:"margin-top:8px",onclick:function(){rm(AK,x.id)}},"Usuń"):null)}));
+}
+function annView(){
+  var A=me.role==="admin",t=h("input"),b=h("textarea",{rows:"3"}),m=h("div",{class:"msg"});
+  function add(e){e.preventDefault();if(!t.value.trim()||!b.value.trim())return setMsg(m,"Wpisz tytuł i treść.");
+    var a=ld(AK);a.push({id:rnd(6),title:t.value.trim(),text:b.value.trim(),by:me.id,date:today()});sv(AK,a);render()}
+  return h("div",null,h("h2",null,"Ogłoszenia"),
+    A?h("form",{class:"card",onsubmit:add,style:"margin-bottom:18px"},h("b",null,"Nowe ogłoszenie"),field("Tytuł",t),field("Treść",b),
+      h("button",{class:"p",type:"submit",style:"margin-top:14px"},"Opublikuj"),m):null,annList(50,A));
+}
+
+function homeExtra(){
+  var my=ld(TK).filter(function(x){return x.who===me.id&&x.st!=="zrobione"}),
+      late=my.filter(function(x){return x.due&&x.due<today()}).length,
+      pend=me.role==="admin"?ld(LK).filter(function(x){return x.st==="oczekuje"}).length:0;
+  return h("div",null,h("div",{class:"grid"},stat("Moje otwarte zadania",my.length),stat("Zaległe zadania",late),
+    me.role==="admin"?stat("Wnioski do rozpatrzenia",pend):null),h("h2",null,"Ogłoszenia"),annList(3,false),h("div",{style:"height:14px"}));
+}
+
+function backupCard(){
+  var m=h("div",{class:"msg"}),fi=h("input",{type:"file",accept:".json",style:"display:none"});
+  fi.addEventListener("change",function(){var r=new FileReader();r.onload=function(){try{
+    var o=JSON.parse(r.result);
+    if(!Array.isArray(o.users)||!o.users.some(function(u){return u.role==="admin"}))throw 0;
+    if(!confirm("Import zastąpi wszystkie obecne dane. Kontynuować?"))return;
+    save(o.users);sv(TK,o.tasks||[]);sv(AK,o.ann||[]);sv(LK,o.leave||[]);ssSet("korpo_sid",null);me=null;render();
+  }catch(e){setMsg(m,"Nieprawidłowy plik kopii zapasowej.")}};r.readAsText(fi.files[0])});
+  return h("div",{class:"card",style:"margin-top:18px"},h("b",null,"Kopia zapasowa"),
+    h("p",{class:"mut"},"Dane są zapisane w tej przeglądarce – eksportuj je regularnie."),
+    h("button",{onclick:function(){var b=new Blob([JSON.stringify({users:load(),tasks:ld(TK),ann:ld(AK),leave:ld(LK)})],{type:"application/json"}),
+      a=h("a",{href:URL.createObjectURL(b),download:"korpopanel-backup.json"});document.body.appendChild(a);a.click();a.remove()}},"Eksportuj"),
+    document.createTextNode(" "),h("button",{onclick:function(){fi.click()}},"Importuj"),fi,m);
+}
+var VIEWS={home:function(){return homeView()},tasks:tasksView,leave:leaveView,ann:annView,acc:function(){return accountsView()},pass:function(){return passView()}};
+
+function logout(){me=null;ssSet("korpo_sid",null);view="home";render()}
+function appView(){
+  var items=[["home","Panel główny"],["tasks","Zadania"],["leave","Urlopy"],["ann","Ogłoszenia"]];
+  if(me.role==="admin")items.push(["acc","Konta użytkowników"]);
+  items.push(["pass","Zmiana hasła"]);
+  var side=h("nav",{class:"side"},h("div",{class:"brand"},"KorpoPanel"));
+  items.forEach(function(it){
+    var b=h("button",{"data-v":it[0],class:view===it[0]?"on":"",onclick:function(){if(me.must)return;view=it[0];render()}},it[1]);
+    side.appendChild(b);
+  });
+  side.appendChild(h("div",{class:"who"},me.name));
+  side.appendChild(h("button",{onclick:logout},"Wyloguj"));
+  var v=me.must?"pass":view;
+  if(v==="acc"&&me.role!=="admin")v="home";
+  var main=h("main",{class:"main"},(VIEWS[v]||VIEWS.home)());
+  return h("div",{class:"app"},side,main);
+}
+function render(){
+  var r=document.getElementById("root");r.textContent="";
+  if(me){var fresh=load().find(function(x){return x.id===me.id});if(!fresh){me=null}else me=fresh}
+  r.appendChild(me?appView():loginView());
+}
+init();
+</script>
+</body>
+</html>
